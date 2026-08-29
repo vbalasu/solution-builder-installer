@@ -11,3 +11,5 @@ databricks.staging.yml
 *~
 # local Isaac tooling state
 .isaac/
+# upstream repo cloned locally during an install run
+solution-builder/

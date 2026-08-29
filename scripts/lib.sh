@@ -53,13 +53,20 @@ dbx() {
 
 # ---- tiny JSON extractor (uses python3, always present on macOS/Linux) -----
 # usage: echo "$json" | jget 'a.b.0.c'
+# NOTE: JSON is passed via env (SB_JGET_JSON), NOT piped to python's stdin.
+# A `python3 - <<'PY'` heredoc makes the heredoc python's stdin (the program),
+# so json.load(sys.stdin) would read empty — hence the env-var handoff.
 jget() {
-  python3 - "$1" <<'PY'
-import sys, json
-path = sys.argv[1].split(".") if len(sys.argv) > 1 and sys.argv[1] else []
+  SB_JGET_JSON="$(cat)" SB_JGET_PATH="${1:-}" python3 <<'PY'
+import sys, os, json
+raw  = os.environ.get("SB_JGET_JSON", "")
+_pth = os.environ.get("SB_JGET_PATH", "")
+path = _pth.split(".") if _pth else []
 try:
-    data = json.load(sys.stdin)
+    data = json.loads(raw) if raw.strip() else None
 except Exception:
+    sys.exit(0)
+if data is None:
     sys.exit(0)
 cur = data
 for key in path:

@@ -68,9 +68,9 @@ info "Profile in use: ${SB_PROFILE:-<CLI default / DATABRICKS_CONFIG_PROFILE>}"
 
 step "3/4  Serving endpoints (candidates for the model/embedding config)"
 EP_JSON="$(dbx serving-endpoints list -o json 2>/dev/null || echo '[]')"
-printf '%s' "$EP_JSON" | python3 - <<'PY'
-import sys, json
-eps = json.load(sys.stdin)
+EP_JSON="$EP_JSON" python3 <<'PY'
+import os, json
+eps = json.loads(os.environ.get("EP_JSON", "") or "[]")
 chat  = [e["name"] for e in eps if e.get("task")=="llm/v1/chat"]
 embed = [e["name"] for e in eps if e.get("task")=="llm/v1/embeddings"]
 def suggest(names, needles):
@@ -98,9 +98,9 @@ COUNT="$(printf '%s' "$PROJ_JSON" | python3 -c 'import sys,json;print(len(json.l
 if [[ "$COUNT" == "0" ]]; then
   info "No Lakebase projects yet — the installer will create one for you (workspace users can create these by default)."
 else
-  printf '%s' "$PROJ_JSON" | python3 - <<'PY'
-import sys, json
-for p in json.load(sys.stdin):
+  PROJ_JSON="$PROJ_JSON" python3 <<'PY'
+import os, json
+for p in json.loads(os.environ.get("PROJ_JSON", "") or "[]"):
     st = p.get("status", {})
     print(f"    - {p.get('project_id')}   (default branch: {st.get('default_branch','?').split('/')[-1]}, pg {st.get('pg_version','?')})")
 PY

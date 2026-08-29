@@ -45,12 +45,17 @@ GRANTED="$(dbx api get "/api/2.0/permissions/database-projects/$LB_PROJECT" -o j
 [[ "$GRANTED" == "True" ]] && ok "Confirmed: SP is on the project ACL." || warn "Could not confirm SP on ACL — check via the Lakebase UI."
 
 step "2/2  Create/replace the SP's Postgres role on branch '$LB_BRANCH'"
-dbx postgres create-role "projects/$LB_PROJECT/branches/$LB_BRANCH" \
-  --role-id "$SP" --replace-existing \
+# The role-id is the final component of the role's RESOURCE name and must match
+# ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$ — i.e. it must START WITH A LETTER. SP client
+# ids are UUIDs that usually start with a digit, so we prefix the resource id with
+# 'sp-'. The identity mapping still uses the raw client id via spec.postgres_role.
+ROLE_ID="sp-$SP"
+CREATE_ERR="$(dbx postgres create-role "projects/$LB_PROJECT/branches/$LB_BRANCH" \
+  --role-id "$ROLE_ID" --replace-existing \
   --json "$(cat <<JSON
 {"spec":{"identity_type":"SERVICE_PRINCIPAL","postgres_role":"$SP","auth_method":"LAKEBASE_OAUTH_V1","membership_roles":["DATABRICKS_SUPERUSER"]}}
 JSON
-)" >/dev/null 2>&1 && ok "Postgres role ensured (superuser)." \
-  || warn "create-role returned non-zero — the role may already exist, or the grant above already auto-provisioned it. Verify with: databricks postgres list-roles projects/$LB_PROJECT/branches/$LB_BRANCH"
+)" 2>&1 >/dev/null)" && ok "Postgres role ensured (superuser): $ROLE_ID" \
+  || warn "create-role returned non-zero: ${CREATE_ERR:-<no output>}. Verify with: databricks postgres list-roles projects/$LB_PROJECT/branches/$LB_BRANCH"
 hr
 ok "Service principal is wired to Lakebase."
