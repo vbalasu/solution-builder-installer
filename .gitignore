@@ -1,0 +1,8 @@
+.DS_Store
+*.log
+*.bak
+*.bak.*
+# never accept a filled-in deploy config into this repo
+databricks.prod.yml
+databricks.staging.yml
+.env
