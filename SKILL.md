@@ -232,9 +232,12 @@ Capture the three `KEY=VALUE` lines it prints (`LAKEBASE_PROJECT_ID`,
 ```
 
 This starts from `databricks.prod.yml.example`, fills your values, and **appends
-the 9 explicit build scopes** to `user_api_scopes` (on top of the base
+the 10 explicit build scopes** to `user_api_scopes` (on top of the base
 `catalog.*` reads). It then runs `bundle validate` and prints the resolved
-**12-scope** list — show that to the user so they can see exactly what's granted.
+**13-scope** list — show that to the user so they can see exactly what's granted.
+The set covers every `initial_templates/*` capability (Lakeflow/SDP, AI/BI
+**dashboards** + Genie, metric views, KA/MAS, ML, Lakebase, the app), so
+templates build out of the box.
 
 ### Step 5 — Deploy
 

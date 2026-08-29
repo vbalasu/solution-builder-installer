@@ -162,4 +162,4 @@ step "Validating the bundle + resolved scopes"
 )
 hr
 ok "Configuration written. Next: deploy."
-info "The base catalog.* read scopes come from the committed databricks.yml; the 9 build scopes above are appended by this prod overlay."
+info "The base catalog.* read scopes come from the committed databricks.yml; the ${#SB_BUILD_SCOPES[@]} build scopes above are appended by this prod overlay."

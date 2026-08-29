@@ -31,30 +31,54 @@ survives redeploys, and it's auditable.
 | Layer | Where | Scopes |
 |---|---|---|
 | Base (committed) | `app/databricks.yml` → `resources.apps…user_api_scopes` | `catalog.catalogs`, `catalog.schemas`, `catalog.tables` — generic metadata reads for the grounding scan |
-| Build overlay (this installer) | `app/databricks.prod.yml` → `targets.prod.resources.apps…user_api_scopes` | the 9 tokens below — **appended** to the base by DAB |
+| Build overlay (this installer) | `app/databricks.prod.yml` → `targets.prod.resources.apps…user_api_scopes` | the 10 tokens below — **appended** to the base by DAB |
 
 DAB **appends** a target-level `user_api_scopes` to the base list (verify with
 `databricks bundle validate -t prod -o json`). So the overlay lists only the
 *additional* build scopes; the `catalog.*` reads come from the base file.
 
-## The 9 build scopes (verbatim, all documented Databricks Apps scopes)
+## The 10 build scopes (verbatim, all documented Databricks Apps scopes)
 
 | Scope | Enables |
 |---|---|
-| `sql` | SQL warehouses + query execution — dashboards, metric views, data-gen SQL, Genie validation queries |
+| `sql` | SQL warehouses + query execution — **and AI/BI (Lakeview) DASHBOARDS** (deprecated `sql.dashboards` maps to `sql`), metric views, data-gen SQL, Genie validation queries |
 | `genie` | Genie space create/manage |
 | `postgres` | Lakebase (Postgres) objects |
 | `workspace.workspace` | Jobs, Lakeflow/SDP pipelines, clusters, notebooks, secrets, repos — **there is no separate jobs/pipelines/clusters scope** |
 | `files` | Workspace files / UC volume file IO — data-gen output, RAG source documents |
 | `apps` | Create/deploy the generated Databricks App |
-| `model-serving` | Serving endpoints for Knowledge Assistant / Multi-Agent Supervisor |
+| `model-serving` | Serving endpoints for Knowledge Assistant / Multi-Agent Supervisor / ML |
+| `ai-gateway` | AI Gateway `/serving-endpoints/responses` — the generated full-stack app's agent LLM calls |
 | `vector-search` | Vector indexes for RAG / Knowledge Assistant |
 | `catalog.connections` | Lakeflow Connect ingestion connections |
 
-Resolved together with the base, the app declares **12** scopes:
+Resolved together with the base, the app declares **13** scopes:
 `catalog.catalogs`, `catalog.schemas`, `catalog.tables`, `sql`, `genie`,
 `postgres`, `workspace.workspace`, `files`, `apps`, `model-serving`,
-`vector-search`, `catalog.connections`.
+`ai-gateway`, `vector-search`, `catalog.connections`.
+
+## ⚠️ The valid vocabulary — and what is NOT valid
+
+The whole set of valid Databricks Apps `user_api_scopes`
+(<https://docs.databricks.com/dev-tools/databricks-apps/auth>) is: `ai-gateway`,
+`apps`, `files`, `genie`, `model-serving`, `postgres`, `sql`, `vector-search`,
+`sql:restricted-query`, plus SDK-style `catalog.catalogs`, `catalog.schemas`,
+`catalog.tables`, `catalog.connections`, `workspace.workspace` (each with an
+optional `:read`). **Nothing outside this list deploys.**
+
+- **There is NO `dashboards` scope.** AI/BI (Lakeview) dashboards ride on `sql`
+  (deprecated `sql.dashboards` → `sql`). Declaring `dashboards` fails the deploy
+  with `The specified scope dashboards is not a valid scope` (verified on a real
+  workspace; the workspace settings API exposes no allowlist to add it). If a
+  dashboard build 403s **with `sql` present**, it's a **stale OBO token** —
+  RE-AUTHORIZE (below), don't chase a scope.
+- **Don't use deprecated aliases:** `serving.serving-endpoints` → `model-serving`;
+  `dashboards.genie` → `genie`; `vectorsearch.*` → `vector-search`; `sql.*` →
+  `sql`. Mixing one in can make the agent 403 `Invalid scope, required scopes: <current>`.
+
+This set maps every `initial_templates/*` capability — Lakeflow/SDP, AI/BI
+dashboards (via `sql`) + Genie, metric views, KA/MAS, ML, Lakebase, the app + its
+Responses API (`ai-gateway`) — onto a valid scope, so templates build out of the box.
 
 ## After changing scopes: RE-AUTHORIZE
 

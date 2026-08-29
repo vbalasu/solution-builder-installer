@@ -114,14 +114,25 @@ sb_probe_endpoint() {
 # These are the EXACT documented Databricks Apps user-authorization scopes the
 # Build stage needs — appended to the base catalog.* reads that ship in
 # databricks.yml. We deliberately do NOT use `all-apis` (see references/scopes.md).
+#
+# VOCABULARY NOTE: use ONLY the valid Databricks Apps `user_api_scopes` strings
+# (docs.databricks.com/dev-tools/databricks-apps/auth): ai-gateway, apps, files,
+# genie, model-serving, postgres, sql, vector-search, sql:restricted-query, and
+# the SDK-style catalog.* / workspace.workspace. There is NO `dashboards` scope
+# for Apps — AI/BI (Lakeview) dashboards ride on `sql` (the deprecated
+# `sql.dashboards` maps to `sql`); declaring `dashboards` makes the deploy fail
+# with "is not a valid scope". Do NOT use the deprecated aliases
+# (`serving.serving-endpoints`→model-serving, `dashboards.genie`→genie,
+# `vectorsearch.*`→vector-search). See references/scopes.md.
 SB_BUILD_SCOPES=(
-  sql                  # SQL warehouses + query execution (dashboards, metric views, data-gen SQL, Genie validation)
+  sql                  # SQL warehouses + query exec + AI/BI (Lakeview) DASHBOARDS + metric views + Genie validation
   genie                # Genie space create/manage
   postgres             # Lakebase (Postgres) objects
   workspace.workspace  # Jobs, Lakeflow/SDP pipelines, clusters, notebooks, secrets, repos
   files                # Workspace files / UC volume file IO (data-gen output, RAG source docs)
   apps                 # Create/deploy the generated Databricks App
-  model-serving        # Serving endpoints for Knowledge Assistant / Multi-Agent Supervisor
+  model-serving        # Serving endpoints for Knowledge Assistant / Multi-Agent Supervisor / ML
+  ai-gateway           # AI Gateway /serving-endpoints/responses (the generated app's agent LLM calls)
   vector-search        # Vector indexes for RAG / Knowledge Assistant
   catalog.connections  # Lakeflow Connect ingestion connections
 )

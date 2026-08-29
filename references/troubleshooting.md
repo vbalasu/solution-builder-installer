@@ -42,6 +42,19 @@ then reopen the URL and start a NEW build/session so a fresh token is minted.
 Confirm by asking the agent to report its current token scopes — you want to
 see `sql`, `genie`, `postgres`, `workspace`, etc.
 
+### AI/BI dashboard deploy fails / agent says it "lacks the dashboards scope"
+There is **NO `dashboards` scope** for Databricks Apps — declaring it fails the
+deploy (`The specified scope dashboards is not a valid scope`). AI/BI (Lakeview)
+dashboard creation rides on the **`sql`** scope (deprecated `sql.dashboards` →
+`sql`), which is already in the default set. So a dashboard 403 with `sql`
+present is almost always a **stale OBO token**, not a missing scope.
+**Fix:** RE-AUTHORIZE — open the app in a fresh/incognito window and accept the
+consent prompt (or stop+start the compute and reopen), start a **new** build
+session so a fresh token is minted, then ask the agent to report its token
+scopes and confirm `sql` is listed. Re-run just the dashboard step. Do **not**
+try to add a `dashboards` scope (there's no allowlist for it either — the
+settings API exposes none). See `scopes.md` → "The valid vocabulary".
+
 ### A specific capability 403s even after re-auth (e.g. a pipeline or job)
 The 12 explicit scopes cover the common Build path, and `workspace.workspace`
 is the documented home for jobs/pipelines/clusters. If one specific API still
