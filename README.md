@@ -13,7 +13,9 @@ deploying, wiring the service principal, and launching. The deterministic parts
 are done by scripts so the run is reproducible; the judgment parts (which model
 endpoints, new vs. existing Lakebase) are asked of you.
 
-> Invoke it in Claude Code as **`/solution-builder-installer`**.
+> **Don't have the skill yet?** [**Get started**](#get-started) below — it's a
+> one-line install, then you invoke it in Claude Code as
+> **`/solution-builder-installer`**.
 
 ## What you'll unlock (a taste)
 
@@ -26,22 +28,52 @@ endpoints, new vs. existing Lakebase) are asked of you.
 
 (Full list in [`references/superpowers.md`](references/superpowers.md).)
 
-## Install the skill
+## Get started
+
+Starting from scratch (you don't have the skill installed yet), it's three quick
+moves: **install** the skill so the command exists, **load** it into Claude Code,
+then **run** it.
+
+### 1. Install the skill
+
+A Claude Code skill is just a folder under `~/.claude/skills/`, and **the folder
+name becomes the slash command**. Clone this repo into a folder named
+`solution-builder-installer` there:
 
 ```bash
-git clone git@github-vbalasu:vbalasu/solution-builder-installer.git \
+git clone https://github.com/vbalasu/solution-builder-installer.git \
   ~/.claude/skills/solution-builder-installer
 ```
 
-(HTTPS also works: `https://github.com/vbalasu/solution-builder-installer.git`.)
+That's the whole install — the `SKILL.md` at the top of the folder is all Claude
+Code needs. Nothing to build, no manifest, no config to edit.
 
-Restart Claude Code (or `/skills`), then run:
+> **Want to keep the repo elsewhere** (e.g. to hack on it)? Clone it anywhere,
+> then symlink it in — the **link's** name is what becomes the command:
+> ```bash
+> git clone https://github.com/vbalasu/solution-builder-installer.git
+> ln -s "$(pwd)/solution-builder-installer" ~/.claude/skills/solution-builder-installer
+> ```
+> (SSH clone URL: `git@github.com:vbalasu/solution-builder-installer.git`.)
+
+### 2. Load it into Claude Code
+
+- **You already have other skills** (i.e. `~/.claude/skills/` existed when you
+  started Claude Code)? New skills hot-load — just run `/skills` and confirm
+  **solution-builder-installer** is in the list.
+- **This is your very first skill** (you just created `~/.claude/skills/`)?
+  Restart Claude Code once so it picks up the new folder.
+
+### 3. Run it
 
 ```
 /solution-builder-installer
 ```
 
-Claude reads `SKILL.md` and drives the rest.
+Claude reads `SKILL.md` and drives the whole install from there — it even sets up
+the local command-line tools it needs in Step 0. All **you** need on hand is a
+**Databricks workspace you control** and the ability to run the Databricks CLI
+against it — see [Prerequisites](#prerequisites) next.
 
 ## Prerequisites
 
