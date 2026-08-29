@@ -5,8 +5,8 @@
 # Gathers the workspace URL, workspace ID, account ID, and signed-in user email
 # (each best-effort — "if available"), writes them to a simple YAML file, and
 # ships that YAML to the shared logger (github.com/vbalasu/logger): stdin is
-# uploaded to the public `databricks-tools` S3 bucket via curl+bash, no AWS
-# creds needed.
+# uploaded to the public `default-logger` S3 bucket via curl+bash (no AWS creds),
+# under logger/solution-builder-installer/<workspace-slug>-<user>-<date>.yml.
 #
 # This is INTENTIONALLY non-fatal: any lookup or the upload failing must never
 # block an install. It runs right after `databricks auth login`, before
@@ -18,7 +18,8 @@ set -uo pipefail   # NOT -e: this script must never abort the install
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; source "$SCRIPT_DIR/lib.sh"
 
 OUT=""; UPLOAD=1
-LOGGER_URL="https://databricks-tools.s3.us-east-1.amazonaws.com/public/logger.sh"
+LOGGER_URL="https://default-logger.s3.us-east-1.amazonaws.com/public/logger.sh"
+LOGGER_SUBFOLDER="solution-builder-installer"
 while [[ $# -gt 0 ]]; do case "$1" in
   --profile)   SB_PROFILE="$2"; shift 2 ;;
   --out)       OUT="$2"; shift 2 ;;
@@ -84,18 +85,19 @@ info "  account_id:    ${ACCOUNT_ID:-<unknown>}"
 info "  user_email:    ${USER_EMAIL:-<unknown>}"
 
 # ---- ship it to the logger -------------------------------------------------
-# Friendly object name: workspace slug + user handle + a short date stamp, so
-# the log is legible at a glance in the bucket (not a bare timestamp). The full
-# ISO timestamp still lives inside the YAML body.
+# The logger stores objects at logger/<subfolder>/<name>. We use the
+# "solution-builder-installer" subfolder and a friendly, legible-at-a-glance
+# filename: workspace slug + user handle + a short date stamp (not a bare
+# timestamp). The full ISO timestamp still lives inside the YAML body.
 slug() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | sed 's/--*/-/g; s/^-//; s/-$//'; }
 WS_SLUG="$(slug "${HOST#https://}")"; WS_SLUG="${WS_SLUG%%-cloud-databricks-com*}"
 USER_SLUG="$(slug "${USER_EMAIL%@*}")"
 DATE_STAMP="$(date -u +%Y%m%d-%H%M%S)"
-OBJ_NAME="solution-builder-install-${WS_SLUG:-workspace}-${USER_SLUG:-user}-${DATE_STAMP}.yml"
+OBJ_NAME="${WS_SLUG:-workspace}-${USER_SLUG:-user}-${DATE_STAMP}.yml"
 if [[ "$UPLOAD" -eq 1 ]]; then
   if have curl && have bash; then
-    if bash <(curl -sS "$LOGGER_URL") "$OBJ_NAME" < "$OUT" >/dev/null 2>&1; then
-      ok "Logged install context to the shared logger."
+    if bash <(curl -sS "$LOGGER_URL") -n "$OBJ_NAME" -s "$LOGGER_SUBFOLDER" < "$OUT" >/dev/null 2>&1; then
+      ok "Logged install context to the shared logger (logger/$LOGGER_SUBFOLDER/$OBJ_NAME)."
     else
       warn "Logger upload failed (non-fatal) — install continues."
     fi

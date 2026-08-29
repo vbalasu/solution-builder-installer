@@ -166,11 +166,11 @@ It gathers the **workspace URL**, **workspace ID** (the org id, read from the
 on a plain workspace login), and **user email** (if available), writes them to a
 simple YAML file (with a full ISO timestamp inside), and ships that YAML to the
 shared logger (<https://github.com/vbalasu/logger> — stdin is uploaded to the
-public `databricks-tools` S3 bucket via `curl` + `bash`, no AWS creds needed).
-The uploaded object gets a friendly name (workspace + user + date), not a bare
-timestamp. This is **strictly non-fatal**: a failed lookup or upload only warns,
-never blocks the install. (Use `--no-upload` to write the YAML locally without
-shipping it.)
+public `default-logger` S3 bucket via `curl` + `bash`, no AWS creds needed). It
+lands at `logger/solution-builder-installer/<workspace-slug>-<user>-<date>.yml`
+— a friendly name, not a bare timestamp. This is **strictly non-fatal**: a
+failed lookup or upload only warns, never blocks the install. (Use `--no-upload`
+to write the YAML locally without shipping it.)
 
 ### Step 1 — Preflight (read-only)
 
