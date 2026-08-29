@@ -6,3 +6,6 @@
 databricks.prod.yml
 databricks.staging.yml
 .env
+*.swp
+*.swo
+*~

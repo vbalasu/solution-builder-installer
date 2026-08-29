@@ -27,6 +27,18 @@ hr()   { printf '%s\n' "${C_DIM}────────────────
 need() { command -v "$1" >/dev/null 2>&1 || die "Required command not found: '$1'. $2"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# ---- platform / package-manager detection ----------------------------------
+detect_os() { case "$(uname -s)" in Darwin) echo macos ;; Linux) echo linux ;; *) echo other ;; esac; }
+detect_pm() {
+  for pm in brew apt-get dnf yum pacman zypper; do
+    command -v "$pm" >/dev/null 2>&1 && { echo "$pm"; return; }
+  done
+  echo none
+}
+# Common install dirs used by the official uv/bun installers, so we can find
+# freshly-installed tools within the same run (a new shell won't have them yet).
+sb_augment_path() { export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"; }
+
 # ---- profile flag helper ---------------------------------------------------
 # Every databricks call takes an optional --profile. If SB_PROFILE is set we
 # pass it; otherwise the CLI default / DATABRICKS_CONFIG_PROFILE is used.

@@ -57,19 +57,61 @@ Genie's Lamp, the App Launcher, …) and give them the one-liner. Set the vibe:
 
 ---
 
-## The 8 steps
+## The steps (0 → 8)
 
-### Step 0 — Prerequisites & clone
+### Step 0 — Prerequisites (tools + access) & clone
 
-Prereqs: `git`, Databricks CLI, `uv`, `bun`, `python3.12` (and `jq` recommended).
+**Don't assume the tools are installed — help set them up.** First report what's
+missing (read-only), show the user the plan, then install with their OK:
+
+```bash
+"$SKILL_DIR/scripts/install-prereqs.sh"            # report only — what's missing + exact commands
+"$SKILL_DIR/scripts/install-prereqs.sh --install"  # install the missing ones (after user OK)
+```
+
+It covers `git`, Databricks CLI, `uv`, `bun`, `python3` (+ `python3.12` for local
+data-gen, via `uv python install 3.12`), and `jq`. On macOS it uses Homebrew (no
+sudo); elsewhere it uses the official installers + your package manager. **Any
+step that needs `sudo` or is interactive (e.g. installing Homebrew itself, or an
+`apt`/`dnf` install), hand to the user to run with a leading `!`** rather than
+running it yourself. After installing `uv`/`bun` via their official installers,
+their bins (`~/.local/bin`, `~/.bun/bin`) may not be on `PATH` in this shell —
+tell the user to open a new terminal or add them to `PATH`.
+
+**Access / privileges — the least-privilege picture (state this clearly up front):**
+
+- ✅ **Account admin is NOT required.** Because this installer declares the exact
+  per-app OBO scopes (never the account-level `all-apis` integration grant),
+  there is no account-admin step at all.
+- ✅ **Workspace admin is NOT strictly required** — but it makes everything
+  frictionless. If the user is **not** a workspace admin, they need these
+  specific capabilities (all normally available to the owner of a sandbox /
+  personal / FEVM workspace):
+  - **Create a Databricks App** (Apps must be enabled; the user needs app-create
+    permission). The app's service principal is created automatically.
+  - **Create a Lakebase (Postgres) project** — workspace users hold `CAN_CREATE`
+    on database projects **by default**, so this is not admin-gated (or reuse an
+    existing project they can manage).
+  - **A Unity Catalog they can build in** — point `default_catalog` at a catalog
+    where they have `USE CATALOG` + `CREATE SCHEMA` (or that they own).
+    ⚠️ Naming a brand-new catalog means the app must `CREATE CATALOG` on the
+    metastore (metastore-admin territory) — so **prefer an existing catalog** to
+    stay least-privilege.
+  - **Query the chosen serving endpoints** — the built-in `databricks-*` FMAPI
+    endpoints are callable by all workspace users, so this is normally free.
+- ℹ️ **The demo BUILDS run as the signed-in user (OBO), bounded by that user's
+  own privileges.** The app can never do more than the user can — so what a demo
+  can create is limited by the user's UC/compute grants. On their own workspace
+  that's typically everything.
+
 The CLI must be authenticated to the target workspace:
 
 ```bash
 databricks auth login --host https://<workspace-url> --profile <name>
 ```
 
-If the user needs to run that themselves, suggest they type it with a leading
-`!` in the Claude Code prompt. Then clone the public repo (pick a working dir):
+If the user needs to run that themselves, suggest the leading `!`. Then clone the
+public repo (pick a working dir):
 
 ```bash
 git clone https://github.com/databricks-solutions/solution-builder.git

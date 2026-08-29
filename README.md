@@ -45,15 +45,31 @@ Claude reads `SKILL.md` and drives the rest.
 
 ## Prerequisites
 
-- Databricks CLI, authenticated to the target workspace
-  (`databricks auth login --host https://<workspace-url> --profile <name>`)
-- [`uv`](https://docs.astral.sh/uv/) · [`bun`](https://bun.sh/) · Python 3.12 · `git` · (`jq` recommended)
-- A Databricks workspace **you control** (this is designed for a fresh/sandbox
-  workspace), with Lakebase (Postgres) available.
+**Tools** — `git`, Databricks CLI, [`uv`](https://docs.astral.sh/uv/),
+[`bun`](https://bun.sh/), `python3` (+ Python 3.12 for local data-gen), and `jq`
+(recommended). **You don't have to install these by hand** — the skill detects
+what's missing and installs it for you (`scripts/install-prereqs.sh`; Homebrew on
+macOS, official installers + your package manager elsewhere). The CLI must be
+authenticated to the target workspace
+(`databricks auth login --host https://<workspace-url> --profile <name>`).
+
+**Access / privileges (least privilege):**
+
+- ✅ **Account admin: not required.** This installer uses the exact per-app OBO
+  scopes, not the account-level `all-apis` grant — so there's no account-admin step.
+- ✅ **Workspace admin: not strictly required** (but simplest). Without it you
+  need: permission to **create a Databricks App**, the ability to **create a
+  Lakebase project** (workspace users have this by default), and **a Unity Catalog
+  you can build in** (`USE CATALOG` + `CREATE SCHEMA`, or one you own). Prefer an
+  **existing** catalog for `default_catalog` — naming a new one needs
+  `CREATE CATALOG` on the metastore (metastore-admin territory).
+- ℹ️ Demo **builds run as you** (OBO), bounded by your own privileges — the app
+  can never exceed what you can do in the workspace. A workspace **you control**
+  (sandbox / personal / FEVM), with Lakebase available, is the ideal target.
 
 ## What it does (the 8 steps)
 
-0. **Clone** the public Solution Builder repo.
+0. **Prerequisites & clone** — install any missing tools, confirm access, clone the public Solution Builder repo.
 1. **Preflight** — check tooling + auth, discover serving endpoints and Lakebase projects (read-only).
 2. **Gather config** — you pick app name, Lakebase, model/embedding endpoints, default catalog.
 3. **Provision Lakebase** — create (or reuse) a project; discover branch + database.
@@ -75,7 +91,8 @@ and the full list are in [`references/scopes.md`](references/scopes.md).
 
 | Script | Does |
 |---|---|
-| `scripts/preflight.sh` | Read-only readiness check + discovery |
+| `scripts/install-prereqs.sh` | Detect + (optionally) install the local tools; report-only by default |
+| `scripts/preflight.sh` | Read-only readiness check (non-fatal on missing tools) + discovery |
 | `scripts/provision-lakebase.sh` | Create/reuse a Lakebase project; print its config values |
 | `scripts/configure.sh` | Generate `databricks.prod.yml` from the `.example` + append explicit scopes |
 | `scripts/deploy.sh` | Build the artifact, then deploy the bundle |
