@@ -9,3 +9,5 @@ databricks.staging.yml
 *.swp
 *.swo
 *~
+# local Isaac tooling state
+.isaac/

@@ -21,6 +21,25 @@ commands without saying what's about to happen and why.
 
 **Public source repo:** <https://github.com/databricks-solutions/solution-builder>
 
+## Start here — respond instantly, ask for the workspace URL
+
+**Your very first reply is one quick question: which Databricks workspace URL
+should Solution Builder be installed into?** Nothing comes before it — do **not**
+read reference files, run any script, or list `databricks auth profiles` first.
+That work is slow and makes the skill feel sluggish; it all waits until you have
+the URL. Send one warm line of vibe + the question, and stop:
+
+> "Let's stand up Solution Builder — a sentence in, a working Databricks solution
+> out. 🛠️ **What's the workspace URL where you'd like it installed?** (something
+> like `https://your-workspace.cloud.databricks.com`)"
+
+Once the user gives you the URL: confirm it's a workspace they own/control, then
+authenticate the CLI to it —
+`databricks auth login --host <url> --profile <name>` (a leading `!` lets the
+user run the interactive login themselves). Reach for `databricks auth profiles`
+**only if you have to** — e.g. to reuse a profile already signed in to that
+host — never as an opening move. Everything else below happens *after* this.
+
 ## Where the scripts live
 
 The deterministic work is done by scripts bundled with this skill. Default
@@ -36,12 +55,14 @@ contains this `SKILL.md`. All scripts are under `$SKILL_DIR/scripts/` and take
 `references/scopes.md`, `references/superpowers.md`, and
 `references/troubleshooting.md` as needed.
 
-## Kick off with the destination (the superpowers)
+## Set the destination (the superpowers)
 
-Before any commands, tell the user what they're unlocking. Pull 3–4 relevant
-items from `references/superpowers.md` (the Data Weaver, the Pipeline Forge, the
-Genie's Lamp, the App Launcher, …) and give them the one-liner. Set the vibe:
-"a sentence in, a working Databricks solution out." Then start.
+Right *after* the workspace-URL question — while auth/preflight runs, not
+before your first reply — tell the user what they're unlocking. Pull 3–4
+relevant items from `references/superpowers.md` (the Data Weaver, the Pipeline
+Forge, the Genie's Lamp, the App Launcher, …) and give them the one-liner. Keep
+it to the vibe ("a sentence in, a working Databricks solution out"); never let it
+delay that opening question.
 
 ## Golden rules
 
@@ -61,7 +82,12 @@ Genie's Lamp, the App Launcher, …) and give them the one-liner. Set the vibe:
 
 ### Step 0 — Prerequisites (tools + access) & clone
 
-**Don't assume the tools are installed — help set them up.** First report what's
+You've already asked for the workspace URL and started `databricks auth login`
+to it (see **Start here**) — that's the front of this step. What's left is local
+tooling, an access sanity-check, and the clone; none of it should precede that
+first workspace-URL question.
+
+**Don't assume the tools are installed — help set them up.** Report what's
 missing (read-only), show the user the plan, then install with their OK:
 
 ```bash
