@@ -33,12 +33,18 @@ while [[ $# -gt 0 ]]; do case "$1" in
   --ai-gateway-mini) GW_MINI="$2"; shift 2 ;;
   --ai-gateway-embedding) GW_EMB="$2"; shift 2 ;;
   --default-catalog) CATALOG="$2"; shift 2 ;;
+  --deployer-sp-client-id) DEPLOYER_SP_CLIENT_ID="$2"; shift 2 ;;
+  --deployer-sp-secret-scope) DEPLOYER_SP_SECRET_SCOPE="$2"; shift 2 ;;
+  --deployer-sp-secret-key) DEPLOYER_SP_SECRET_KEY="$2"; shift 2 ;;
+  --default-target-workspace-host) DEFAULT_TARGET_WS_HOST="$2"; shift 2 ;;
   --force) FORCE=1; shift ;;
   --skip-endpoint-check) SKIP_EP_CHECK=1; shift ;;
   -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) die "Unknown arg: $1" ;;
 esac; done
 : "${SKIP_EP_CHECK:=0}"
+: "${DEPLOYER_SP_CLIENT_ID:=}"; : "${DEPLOYER_SP_SECRET_SCOPE:=}"
+: "${DEPLOYER_SP_SECRET_KEY:=}"; : "${DEFAULT_TARGET_WS_HOST:=}"
 
 EXAMPLE="$APP_DIR/databricks.prod.yml.example"
 OUT="$APP_DIR/databricks.prod.yml"
@@ -148,6 +154,57 @@ open(out, "w").write("\n".join(out_lines) + "\n")
 print("wrote %d lines; replaced %d keys; inserted %d scopes" % (len(out_lines), len(seen), len(scopes)))
 PY
 ok "Generated databricks.prod.yml"
+
+# --- optional: wire the DEPLOYER SERVICE PRINCIPAL into app_env --------------
+# Required for AI/BI dashboards + full template builds: the OBO token can't
+# carry the `dashboards` scope, so builds must run as a non-downscoped SP.
+# See references/scopes.md → "Why a deployer SP". The client SECRET is read
+# from the secret scope and written as a plain app env var into this GITIGNORED
+# file (Databricks Apps deliver SP creds via env; build.sh has no valueFrom
+# path). It is never committed. Skip the whole block if no SP was passed.
+if [[ -n "$DEPLOYER_SP_CLIENT_ID" ]]; then
+  step "Wiring the deployer service principal into app_env"
+  if [[ -z "$DEPLOYER_SP_SECRET_SCOPE" || -z "$DEPLOYER_SP_SECRET_KEY" ]]; then
+    die "Need --deployer-sp-secret-scope and --deployer-sp-secret-key with --deployer-sp-client-id."
+  fi
+  TARGET_HOST="${DEFAULT_TARGET_WS_HOST}"
+  if [[ -z "$TARGET_HOST" ]]; then
+    TARGET_HOST="$(dbx auth env 2>/dev/null | sed -n 's/.*DATABRICKS_HOST=\([^ ]*\).*/\1/p' | head -1)"
+  fi
+  OUT="$OUT" SC="$DEPLOYER_SP_SECRET_SCOPE" KY="$DEPLOYER_SP_SECRET_KEY" \
+  CID="$DEPLOYER_SP_CLIENT_ID" HOST="$TARGET_HOST" PROFILE="${SB_PROFILE:-}" python3 <<'PY'
+import os, subprocess, base64, json, sys
+out = os.environ["OUT"]
+cmd = ["databricks","secrets","get-secret",os.environ["SC"],os.environ["KY"],"-o","json"]
+if os.environ.get("PROFILE"): cmd += ["--profile", os.environ["PROFILE"]]
+r = subprocess.run(cmd, capture_output=True, text=True)
+try:
+    secret = base64.b64decode(json.loads(r.stdout)["value"]).decode()
+except Exception:
+    sys.stderr.write("ERROR: could not read secret %s/%s from the scope.\n" % (os.environ["SC"], os.environ["KY"]))
+    sys.exit(4)
+lines = open(out).read().splitlines()
+if any(l.startswith("        DEPLOYER_SP_CLIENT_ID:") for l in lines):
+    print("· deployer SP env already present"); sys.exit(0)
+anchor = next((i for i,l in enumerate(lines) if l.startswith("        DEFAULT_CATALOG:")), None)
+if anchor is None:
+    sys.stderr.write("ERROR: could not find the app_env anchor (DEFAULT_CATALOG).\n"); sys.exit(4)
+inject = [
+    "        DEPLOYER_SP_CLIENT_ID: %s" % os.environ["CID"],
+    "        DEPLOYER_SP_CLIENT_SECRET: %s" % secret,
+]
+if os.environ.get("HOST"):
+    inject.append("        DEFAULT_TARGET_WORKSPACE_HOST: %s" % os.environ["HOST"])
+lines[anchor+1:anchor+1] = inject
+open(out,"w").write("\n".join(lines) + "\n")
+print("wrote DEPLOYER_SP_CLIENT_ID + DEPLOYER_SP_CLIENT_SECRET (hidden)"
+      + (" + DEFAULT_TARGET_WORKSPACE_HOST" if os.environ.get("HOST") else ""))
+PY
+  ok "Deployer SP wired (secret from scope $DEPLOYER_SP_SECRET_SCOPE/$DEPLOYER_SP_SECRET_KEY; not shown)."
+  info "Builds for projects with a target workspace set now run as the SP → dashboards work."
+else
+  warn "No deployer SP configured. AI/BI DASHBOARDS (and thus every initial_templates/* demo) will FAIL to build via the OBO token. Run setup-deployer-sp.sh, then re-run configure.sh with --deployer-sp-* flags. See references/scopes.md."
+fi
 
 step "Validating the bundle + resolved scopes"
 ( cd "$APP_DIR" && mkdir -p .build && touch .build/app.yml

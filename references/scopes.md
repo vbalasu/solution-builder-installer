@@ -80,6 +80,30 @@ This set maps every `initial_templates/*` capability — Lakeflow/SDP, AI/BI
 dashboards (via `sql`) + Genie, metric views, KA/MAS, ML, Lakebase, the app + its
 Responses API (`ai-gateway`) — onto a valid scope, so templates build out of the box.
 
+## Why a deployer SP (the OBO token cannot build dashboards)
+
+The build agent normally acts on the signed-in user's **OBO token**
+(`x-forwarded-access-token`), downscoped to the `user_api_scopes` above. But the
+**AI/BI (Lakeview) dashboards API requires an OAuth scope literally named
+`dashboards`**, and — as the section above shows — `dashboards` is **not in the
+Apps `user_api_scopes` vocabulary at all** (declaring it fails the deploy). So no
+scope tweak can put `dashboards` on the OBO token, and `POST
+/api/2.0/lakeview/dashboards` returns `Provided OAuth token does not have
+required scopes: dashboards`. Since **every `initial_templates/*` demo builds a
+dashboard**, the pure-OBO install can't build any template end to end.
+
+The fix is the app's built-in **deployer service principal** (`models.py` →
+`target_workspace_host`; AUTH.md). When `DEPLOYER_SP_CLIENT_ID` +
+`DEPLOYER_SP_CLIENT_SECRET` are set (and a project has a target workspace), the
+agent's `.databrickscfg` is written with the **SP's OAuth-M2M creds — which are
+NOT scope-downscoped** — so `lakeview create` (and every other resource) works,
+bounded only by the SP's own privileges. `setup-deployer-sp.sh` creates the SP,
+grants it build privileges (workspace admin, simplest), and stores its secret in
+a scope; `configure.sh --deployer-sp-*` wires it into `app_env`. Trade-off:
+builds run as a shared SP, not the signed-in user (the app reconciles resource
+ownership back to the user afterward). The `user_api_scopes` above still matter
+for the agent's identity-attributed metadata reads.
+
 ## After changing scopes: RE-AUTHORIZE
 
 Expanding `user_api_scopes` only changes what the app is *allowed* to request.

@@ -219,7 +219,29 @@ Reusing an existing one:
 Capture the three `KEY=VALUE` lines it prints (`LAKEBASE_PROJECT_ID`,
 `LAKEBASE_BRANCH_ID`, `LAKEBASE_DATABASE_NAME`) — you'll pass them to configure.
 
-### Step 4 — Write `databricks.prod.yml` (+ the explicit scopes)
+### Step 3.5 — Set up the deployer service principal (REQUIRED for dashboards)
+
+**Why this is not optional:** the build agent normally acts via the signed-in
+user's OBO token, which is downscoped to `user_api_scopes`. That vocabulary has
+**no `dashboards` scope** (the Lakeview API requires one), so the OBO path
+**cannot create AI/BI dashboards — and every `initial_templates/*` demo builds
+one.** The fix is a deployer SP whose OAuth-M2M creds are not downscoped; when
+configured, the app runs builds as that SP and dashboards (and everything) work.
+See `references/scopes.md` → "Why a deployer SP".
+
+```bash
+"$SKILL_DIR/scripts/setup-deployer-sp.sh" --profile <profile>   # --grant admin (default)
+```
+
+It creates/reuses the SP, adds it to the `admins` group (simplest way to grant
+the broad build privileges every template needs — confirm this with the user
+first; use `--grant none` and grant targeted privileges if they object), mints
+an OAuth-M2M secret, and stores it in a secret scope (**value never printed**).
+It prints the `--deployer-sp-*` flags to pass to configure. Builds run **as this
+SP** (a shared build identity, not the signed-in user; the app reconciles
+resource ownership back to the user afterward) — flag that trade-off.
+
+### Step 4 — Write `databricks.prod.yml` (+ the explicit scopes + deployer SP)
 
 ```bash
 "$SKILL_DIR/scripts/configure.sh" \
@@ -228,7 +250,10 @@ Capture the three `KEY=VALUE` lines it prints (`LAKEBASE_PROJECT_ID`,
   --lakebase-project-id <slug> --lakebase-branch-id <branch> --lakebase-database <db> \
   --anthropic-llm-endpoint <ep> --ai-gateway <ep> \
   --ai-gateway-mini <ep> --ai-gateway-embedding <ep> \
-  --default-catalog <catalog>
+  --default-catalog <catalog> \
+  --deployer-sp-client-id <client-id> \
+  --deployer-sp-secret-scope <scope> --deployer-sp-secret-key <key> \
+  --default-target-workspace-host https://<this-workspace-host>
 ```
 
 This starts from `databricks.prod.yml.example`, fills your values, and **appends
@@ -236,8 +261,14 @@ the 10 explicit build scopes** to `user_api_scopes` (on top of the base
 `catalog.*` reads). It then runs `bundle validate` and prints the resolved
 **13-scope** list — show that to the user so they can see exactly what's granted.
 The set covers every `initial_templates/*` capability (Lakeflow/SDP, AI/BI
-**dashboards** + Genie, metric views, KA/MAS, ML, Lakebase, the app), so
-templates build out of the box.
+**dashboards** (via `sql`) + Genie, metric views, KA/MAS, ML, Lakebase, the app),
+so templates build out of the box.
+
+The `--deployer-sp-*` flags wire the deployer SP into `app_env`: the client
+SECRET is read from the scope and written as a plain env var into the
+**gitignored** `databricks.prod.yml` (Databricks Apps deliver SP creds via env;
+`build.sh` has no secret-`valueFrom` path). It is never committed. Omit these
+flags only if the user explicitly accepts that dashboards won't build.
 
 ### Step 5 — Deploy
 

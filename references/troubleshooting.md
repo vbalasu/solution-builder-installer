@@ -42,18 +42,21 @@ then reopen the URL and start a NEW build/session so a fresh token is minted.
 Confirm by asking the agent to report its current token scopes — you want to
 see `sql`, `genie`, `postgres`, `workspace`, etc.
 
-### AI/BI dashboard deploy fails / agent says it "lacks the dashboards scope"
-There is **NO `dashboards` scope** for Databricks Apps — declaring it fails the
-deploy (`The specified scope dashboards is not a valid scope`). AI/BI (Lakeview)
-dashboard creation rides on the **`sql`** scope (deprecated `sql.dashboards` →
-`sql`), which is already in the default set. So a dashboard 403 with `sql`
-present is almost always a **stale OBO token**, not a missing scope.
-**Fix:** RE-AUTHORIZE — open the app in a fresh/incognito window and accept the
-consent prompt (or stop+start the compute and reopen), start a **new** build
-session so a fresh token is minted, then ask the agent to report its token
-scopes and confirm `sql` is listed. Re-run just the dashboard step. Do **not**
-try to add a `dashboards` scope (there's no allowlist for it either — the
-settings API exposes none). See `scopes.md` → "The valid vocabulary".
+### AI/BI dashboard build fails: `Provided OAuth token does not have required scopes: dashboards`
+The Lakeview API requires an OAuth scope literally named `dashboards`, but that
+scope is **not in the Apps `user_api_scopes` vocabulary** (declaring it fails the
+deploy: `The specified scope dashboards is not a valid scope`; the settings API
+has no allowlist for it). So the downscoped **OBO token can never create
+dashboards** — and every `initial_templates/*` demo builds one. Re-authorizing
+does **not** fix this (verified: even a freshly-minted OBO token is rejected).
+**Fix:** configure the **deployer service principal** so builds run on
+non-downscoped OAuth-M2M creds — `setup-deployer-sp.sh` then `configure.sh
+--deployer-sp-*` (see `scopes.md` → "Why a deployer SP" and SKILL.md Step 3.5),
+redeploy, and create the project with a **target workspace** set (the
+`DEFAULT_TARGET_WORKSPACE_HOST` pre-fill). Confirm the SP creds work with a quick
+`databricks api post /api/2.0/lakeview/dashboards` using
+`DATABRICKS_AUTH_TYPE=oauth-m2m` + the SP client id/secret. Do **not** try to add
+a `dashboards` scope or `all-apis` — neither is accepted.
 
 ### A specific capability 403s even after re-auth (e.g. a pipeline or job)
 The 12 explicit scopes cover the common Build path, and `workspace.workspace`
