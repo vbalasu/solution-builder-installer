@@ -17,6 +17,19 @@ Built-in FMAPI endpoints are prefixed `databricks-` (e.g.
 `configure.sh` with the corrected `--ai-gateway*` / `--anthropic-llm-endpoint`
 values, then redeploy.
 
+### App build fails: `403 PERMISSION_DENIED: The endpoint is temporarily disabled due to a Databricks-set rate limit of 0.`
+A configured serving endpoint exists in `serving-endpoints list` but is
+**disabled** in this workspace (rate limit 0), so every query 403s. Deploy
+succeeds; the app's builds fail at runtime. Opus and some newer GPT endpoints
+are frequently the disabled ones.
+**Fix:** run `check-endpoints.sh` (it probes each chosen endpoint with a tiny
+real query and prints the ones that DO respond), pick a working endpoint
+(`databricks-claude-sonnet-*` / `-haiku-*` and `databricks-*-embedding-*` are
+usually enabled), then re-run `configure.sh` → `deploy.sh` → `launch.sh`.
+`configure.sh` now runs this probe itself and refuses to write a config that
+names an unusable endpoint (override with `--skip-endpoint-check`). Prefer this
+over `databricks serving-endpoints list` alone — listing ≠ callable.
+
 ### Agent says its token scopes are only `catalog` / `lakeview` (can't build)
 The app hasn't been re-authorized after scopes were expanded.
 **Fix:** open the app URL in a fresh/incognito window and accept the consent

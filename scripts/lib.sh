@@ -88,6 +88,28 @@ else:
 PY
 }
 
+# ---- endpoint availability probe -------------------------------------------
+# Verifies an endpoint is not just LISTED but actually CALLABLE. Many workspaces
+# expose FMAPI endpoints in `serving-endpoints list` that are DISABLED with a
+# "rate limit of 0" — a real query 403s with PERMISSION_DENIED. The installer
+# must catch this before deploy, or the app builds fail at runtime with
+# "The endpoint is temporarily disabled due to a Databricks-set rate limit of 0."
+#
+# Prints exactly one status token: OK | DISABLED | ERROR, and returns 0 only for OK.
+# usage: sb_probe_endpoint <endpoint-name> <chat|embedding>
+sb_probe_endpoint() {
+  local ep="$1" kind="${2:-chat}" payload out rc
+  case "$kind" in
+    embedding) payload='{"input":"ping"}' ;;
+    *)         payload='{"messages":[{"role":"user","content":"ping"}],"max_tokens":5}' ;;
+  esac
+  out="$(dbx serving-endpoints query "$ep" --json "$payload" 2>&1)"; rc=$?
+  if [[ $rc -eq 0 ]]; then echo OK; return 0; fi
+  if printf '%s' "$out" | grep -qiE "rate limit of 0|temporarily disabled"; then echo DISABLED; return 1; fi
+  if printf '%s' "$out" | grep -qiE "does not exist|not found|RESOURCE_DOES_NOT_EXIST"; then echo MISSING; return 1; fi
+  echo ERROR; return 1
+}
+
 # ---- the canonical explicit OBO scope set ----------------------------------
 # These are the EXACT documented Databricks Apps user-authorization scopes the
 # Build stage needs — appended to the base catalog.* reads that ship in

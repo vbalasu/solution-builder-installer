@@ -155,7 +155,9 @@ takes `--app-dir "$APP_DIR"`.
 This checks tooling, confirms who you're signed in as + the host, lists the
 **real serving endpoints** in the workspace (candidates for the model config),
 and lists any existing **Lakebase projects**. Show the user the signed-in
-identity + host and get a thumbs-up that it's the right workspace.
+identity + host and get a thumbs-up that it's the right workspace. Note: the
+endpoint list shows what *exists*, not what's *callable* — a live probe in step 2
+(`check-endpoints.sh`) confirms the chosen ones actually work.
 
 ### Step 2 — Gather configuration choices
 
@@ -168,7 +170,7 @@ names, just ask. Every value maps 1:1 to `databricks.prod.yml`.
 | **App name** | What to call the deployed app | lowercase-with-hyphens, e.g. `solution-builder`. Becomes the workspace app + its URL. |
 | **Lakebase** | New project or reuse an existing one? | New → pick a slug (e.g. `solution-builder`). Reuse → pick from preflight's list. |
 | **Agent model** (`anthropic_llm_endpoint`) | Which Claude endpoint | A `databricks-claude-*` chat endpoint from preflight (e.g. `databricks-claude-sonnet-5`). |
-| **AI Gateway** (`ai_gateway`) | Primary backend chat endpoint | A capable chat endpoint (e.g. `databricks-claude-opus-5`). |
+| **AI Gateway** (`ai_gateway`) | Primary backend chat endpoint | A capable chat endpoint (e.g. `databricks-claude-sonnet-5`). Opus endpoints are often disabled (rate-limit 0) — the endpoint check below will tell you. |
 | **AI Gateway mini** (`ai_gateway_mini`) | Cheap/fast utility endpoint | e.g. `databricks-gpt-5-4-mini`. |
 | **Embedding** (`ai_gateway_embedding`) | Embedding endpoint | e.g. `databricks-qwen3-embedding-0-6b`. |
 | **Default catalog** | Catalog new projects land in | Created at app boot if missing (e.g. `ai_demo_gen` or a catalog you own). |
@@ -176,6 +178,27 @@ names, just ask. Every value maps 1:1 to `databricks.prod.yml`.
 Use the **exact** endpoint names preflight printed — built-in FMAPI endpoints
 carry a `databricks-` prefix, and a wrong name fails the deploy (see
 troubleshooting). Confirm the full set back to the user before proceeding.
+
+**Then verify the chosen endpoints are actually CALLABLE — not just listed.**
+Many workspaces expose FMAPI endpoints in discovery that are DISABLED (a
+"rate limit of 0"): they pass `serving-endpoints list` but every query 403s, so
+the deploy succeeds and then the app's *builds* fail at runtime with
+`403 PERMISSION_DENIED: The endpoint is temporarily disabled due to a
+Databricks-set rate limit of 0.` Catch it now, before provisioning + deploying:
+
+```bash
+"$SKILL_DIR/scripts/check-endpoints.sh" --profile <profile> \
+  --anthropic-llm-endpoint <ep> --ai-gateway <ep> \
+  --ai-gateway-mini <ep> --ai-gateway-embedding <ep>
+```
+
+It sends a tiny real query to each. If any is DISABLED/missing it exits non-zero
+and prints the endpoints that **did** respond — re-pick from that working list
+(re-ask the user) and re-run the check until it's all green. (Note: Opus / newer
+GPT endpoints are often the disabled ones; `databricks-claude-sonnet-*`,
+`databricks-claude-haiku-*`, and `databricks-*-embedding-*` are commonly
+enabled.) `configure.sh` re-runs this same probe as a backstop and refuses to
+write a config with an unusable endpoint.
 
 ### Step 3 — Provision Lakebase
 

@@ -34,9 +34,11 @@ while [[ $# -gt 0 ]]; do case "$1" in
   --ai-gateway-embedding) GW_EMB="$2"; shift 2 ;;
   --default-catalog) CATALOG="$2"; shift 2 ;;
   --force) FORCE=1; shift ;;
+  --skip-endpoint-check) SKIP_EP_CHECK=1; shift ;;
   -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) die "Unknown arg: $1" ;;
 esac; done
+: "${SKIP_EP_CHECK:=0}"
 
 EXAMPLE="$APP_DIR/databricks.prod.yml.example"
 OUT="$APP_DIR/databricks.prod.yml"
@@ -46,6 +48,32 @@ for pair in "profile:$PROFILE" "app-name:$APP_NAME" "lakebase-project-id:$LB_PRO
             "ai-gateway-embedding:$GW_EMB" "default-catalog:$CATALOG"; do
   [[ -n "${pair#*:}" ]] || die "Missing required value: --${pair%%:*}"
 done
+# --- gate: the chosen endpoints must be CALLABLE, not just listed -----------
+# A "rate limit of 0" endpoint deploys fine but fails every build at runtime.
+# Catch it here so a broken config is never written. Bypass with
+# --skip-endpoint-check (e.g. offline / no model-serving access).
+if [[ "$SKIP_EP_CHECK" != "1" ]]; then
+  step "Verifying chosen endpoints are callable (not just present)"
+  EP_FAIL=0
+  probe_or_flag() { # <label> <endpoint> <chat|embedding>
+    local st; st="$(sb_probe_endpoint "$2" "$3")"
+    case "$st" in
+      OK) ok "$1: $2 — callable" ;;
+      DISABLED) err "$1: $2 — DISABLED (Databricks rate limit of 0)"; EP_FAIL=1 ;;
+      MISSING) err "$1: $2 — not found in this workspace"; EP_FAIL=1 ;;
+      *) err "$1: $2 — not callable"; EP_FAIL=1 ;;
+    esac
+  }
+  probe_or_flag "anthropic_llm_endpoint" "$LLM"     chat
+  probe_or_flag "ai_gateway"             "$GW"      chat
+  probe_or_flag "ai_gateway_mini"        "$GW_MINI" chat
+  probe_or_flag "ai_gateway_embedding"   "$GW_EMB"  embedding
+  if [[ "$EP_FAIL" -ne 0 ]]; then
+    hr
+    die "Refusing to write a config with an unusable endpoint. Run check-endpoints.sh to see working alternatives, re-pick, and retry (or pass --skip-endpoint-check to override)."
+  fi
+fi
+
 if [[ -f "$OUT" && "$FORCE" != "1" ]]; then
   BAK="$OUT.bak.$(date +%s)"; cp "$OUT" "$BAK"
   warn "databricks.prod.yml already exists — backed up to $(basename "$BAK") and overwriting (use --force to skip this notice)."
