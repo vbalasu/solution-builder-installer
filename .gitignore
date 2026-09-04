@@ -13,3 +13,7 @@ databricks.staging.yml
 .isaac/
 # upstream repo cloned locally during an install run
 solution-builder/
+# python bytecode
+__pycache__/
+# your filled-in config (copy from config.yaml.example)
+config.yaml

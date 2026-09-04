@@ -1,14 +1,17 @@
 ---
 name: solution-builder-installer
 description: >-
-  Install Databricks Solution Builder in a brand-new workspace, end to end.
-  Prompts for every databricks.prod.yml customization (starting from the
-  upstream .example), provisions Lakebase, applies the EXACT explicit OBO build
-  scopes (never all-apis), deploys the app, wires the app's service principal,
-  launches it, guides re-authorization, and walks the user through building
-  their first solution. Use when someone wants to set up, install, stand up, or
-  deploy Solution Builder / the Databricks demo generator in their own
-  workspace. Public source: github.com/databricks-solutions/solution-builder.
+  Install Databricks Solution Builder in a brand-new workspace, end to end, two
+  ways: a guided wizard that prompts for each choice, OR a deterministic,
+  config-driven pure-Python installer (workspace-setup.py + config.yaml) that
+  runs on a laptop, in CI, or inside a Databricks notebook / workflow with no
+  bash and no build toolchain (a prebuilt app artifact ships in the repo). Either
+  way it provisions Lakebase, applies the EXACT explicit OBO build scopes (never
+  all-apis), deploys the app, wires the app's service principal, launches it, and
+  guides re-authorization. Use when someone wants to set up, install, stand up,
+  deploy, or script/automate the install of Solution Builder / the Databricks
+  demo generator in their own workspace — interactively or from config.yaml, on a
+  laptop or in a notebook. Public source: github.com/databricks-solutions/solution-builder.
 ---
 
 # Solution Builder Installer
@@ -20,6 +23,82 @@ milestones, keep the user oriented ("step 4 of 8"), and never dump a wall of
 commands without saying what's about to happen and why.
 
 **Public source repo:** <https://github.com/databricks-solutions/solution-builder>
+
+## Two ways to install
+
+- **Guided wizard (this skill, below)** — warm, step-by-step, asks the user for
+  each choice. Use this when the user wants a walkthrough or hasn't decided on
+  their config.
+- **Deterministic script (`workspace-setup.py`)** — one call, zero prompts,
+  every choice read from `config.yaml`. **Pure Python (Databricks SDK): no bash,
+  no git, no local build toolchain**, so it runs on a laptop, in CI, OR inside a
+  **Databricks notebook / workflow**. Use it for a repeatable, scriptable install.
+
+### Deterministic install (`workspace-setup.py`)
+
+This path is **pure Python** — it does all workspace work through the Databricks
+SDK and **deploys a PREBUILT app artifact via the Apps SDK** (no bundle/CLI). The
+artifact **ships in this repo** at `artifact/solution-builder-build.zip`, so there
+is **no build step and no toolchain** — clone, configure, run.
+
+Copy the template (`cp config.yaml.example config.yaml` — the real `config.yaml`
+is gitignored) and set `workspace_url`, `default_catalog`, and callable
+`endpoints` (`artifact.path` already points at the bundled zip), then:
+
+```bash
+# laptop / CI
+./workspace-setup.py                 # reads ./config.yaml
+./workspace-setup.py --config x.yaml
+./workspace-setup.py --dry-run       # print the plan, change nothing
+```
+
+```python
+# Databricks notebook (pure Python, no bash). The runtime's bundled databricks-sdk
+# can be too old (e.g. missing service_principal_secrets_proxy), so pin one:
+# --- cell 1 ---
+%pip install -q "databricks-sdk>=0.100" pyyaml
+# --- cell 2 ---
+dbutils.library.restartPython()
+# --- cell 3 ---
+import importlib.util
+spec = importlib.util.spec_from_file_location("ws", "/Volumes/.../workspace-setup.py")
+ws = importlib.util.module_from_spec(spec); spec.loader.exec_module(ws)
+ws.run("/Volumes/.../config.yaml")   # profile:"" → the notebook's ambient auth; or dry_run=True
+```
+
+Verified end-to-end on a real workspace: the same script installs cleanly from a
+laptop (profile auth) **and** from a serverless notebook job (ambient auth). The
+app reaches `RUNNING` with Lakebase connected.
+
+Phase B verifies auth (profile, env vars, **or the notebook's ambient auth**),
+probes endpoint callability, provisions Lakebase (projects/branches REST),
+creates the deployer SP + secret, regenerates `app.yml` env for this workspace,
+uploads the source, creates the app with the **exact 13 `user_api_scopes`**,
+deploys, wires the SP to Lakebase, and starts the app. Every step is idempotent.
+The one value the user must set is a real `workspace_url` (the placeholder is
+refused). Post-install **re-authorization** (Step 8 below) still applies.
+
+**Auth:** no interactive login needed in a notebook/workflow — the SDK uses
+ambient credentials. On a laptop, `databricks auth login … --profile <name>` and
+set `databricks.profile`; in CI, `DATABRICKS_HOST`+`DATABRICKS_TOKEN` with
+`profile: ""`.
+
+**Dependencies:** only `databricks-sdk` (present in DBR; `pip install` elsewhere).
+YAML uses PyYAML if present, else a built-in fallback parser.
+
+**On a bad endpoint** the script probes the workspace and prints a **paste-ready
+`endpoints:` block** of callable (non-rate-limited) endpoints — the user pastes
+it into `config.yaml` and re-runs.
+
+**Refreshing the artifact (optional):** the bundled zip is a pinned snapshot. To
+pick up newer upstream code, rebuild it on any host with `git`+`uv`+`bun`+CLI
+(`app/scripts/build.sh --target prod`, then zip `.build` into
+`artifact/solution-builder-build.zip`) — see "Refreshing the artifact" in
+`INSTALL.md`. Never commit an `app.yml` with a real deployer-SP secret; the
+installer regenerates env at deploy time.
+
+*(The bundled `scripts/*.sh` remain for the guided wizard below and for rebuilding
+the artifact; `workspace-setup.py` itself calls none of them.)*
 
 ## Start here — respond instantly, ask for the workspace URL
 

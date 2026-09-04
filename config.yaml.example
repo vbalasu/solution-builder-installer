@@ -1,0 +1,83 @@
+# ============================================================================
+# config.yaml — the ONLY input to workspace-setup.py.
+#
+# Complete, deterministic configuration for installing Databricks Solution
+# Builder. The installer is PURE PYTHON (Databricks SDK) and runs anywhere the
+# SDK runs — a laptop, CI, OR a Databricks notebook / workflow. It uses no bash,
+# no git, and no local build toolchain.
+#
+#     ./workspace-setup.py                 # uses ./config.yaml
+#     ./workspace-setup.py --config x.yaml # or point at another file
+#     ./workspace-setup.py --dry-run       # print the plan; change nothing
+#
+# In a Databricks notebook (pure Python, no bash) — the runtime's bundled SDK
+# can be too old, so pin a recent one and restart, THEN run in a new cell:
+#     # cell 1
+#     %pip install -q "databricks-sdk>=0.100" pyyaml
+#     # cell 2
+#     dbutils.library.restartPython()
+#     # cell 3
+#     import importlib.util
+#     spec = importlib.util.spec_from_file_location("ws", "/Volumes/.../workspace-setup.py")
+#     ws = importlib.util.module_from_spec(spec); spec.loader.exec_module(ws)
+#     ws.run("/Volumes/.../config.yaml")   # profile:"" → uses the notebook's ambient auth
+# ============================================================================
+
+# ── Databricks target ───────────────────────────────────────────────────────
+# Auth is resolved by the SDK's default chain, so you have options:
+#   • Laptop:   run `databricks auth login --host <url> --profile <name>` once,
+#               then set `profile` below.
+#   • Notebook / workflow: leave `profile` blank ("") — the SDK uses the
+#               notebook's ambient credentials automatically. Nothing to log in.
+#   • CI:       set DATABRICKS_HOST + DATABRICKS_TOKEN env vars, profile "".
+databricks:
+  workspace_url: https://your-workspace.cloud.databricks.com
+  profile: solution-builder          # ~/.databrickscfg profile; "" = ambient/env auth
+
+# ── Prebuilt app artifact ─────────────────────────────────────────────────────
+# A ready-to-deploy artifact SHIPS IN THIS REPO at the default path below, so
+# there is NO build step and NO toolchain to install — just clone, configure,
+# run. The installer deploys this artifact via the Apps SDK and regenerates its
+# env for your workspace. (To refresh it from newer upstream source, see
+# "Refreshing the artifact" in INSTALL.md.) In a notebook, upload this .zip to a
+# UC Volume and point `path` at it there.
+artifact:
+  path: ./artifact/solution-builder-build.zip   # committed prebuilt artifact (dir or .zip)
+  # Where to stage the source inside the workspace (the app deploys from here).
+  # Defaults to the signed-in user's home if left blank.
+  workspace_source_path: ""               # e.g. /Workspace/Users/me@co.com/solution-builder-src
+
+# ── The deployed app ──────────────────────────────────────────────────────────
+app:
+  name: solution-builder             # lowercase-with-hyphens; becomes the app + its URL
+  default_catalog: ai_demo_gen       # a UC catalog you can CREATE SCHEMA in (prefer an existing one)
+
+# ── Lakebase (Postgres) ───────────────────────────────────────────────────────
+lakebase:
+  project_id: solution-builder       # project slug
+  reuse_existing: false              # false → create if missing; true → must already exist
+
+# ── Serving endpoints ─────────────────────────────────────────────────────────
+# Use EXACT endpoint names from THIS workspace. Each is probed with a real query
+# before deploy — a DISABLED endpoint (Databricks "rate limit of 0") aborts the
+# run AND prints a paste-ready list of callable alternatives.
+endpoints:
+  anthropic_llm_endpoint: databricks-claude-sonnet-5   # the agent's Claude endpoint
+  anthropic_base_path: serving-endpoints/anthropic       # shim path (match the endpoint kind)
+  ai_gateway: databricks-claude-sonnet-5               # primary backend chat endpoint
+  ai_gateway_mini: databricks-gpt-5-4-mini               # cheap/fast utility endpoint
+  ai_gateway_embedding: databricks-qwen3-embedding-0-6b  # embedding endpoint
+
+# ── Deployer service principal (REQUIRED for AI/BI dashboards) ────────────────
+# The OBO token cannot carry the `dashboards` scope, so without this every
+# initial_templates/* demo fails to build a dashboard.
+deployer_sp:
+  enabled: true
+  name: solution-builder-deployer
+  secret_scope: solution-builder
+  secret_key: deployer-sp-client-secret
+  grant: admin                       # admin (adds SP to workspace `admins`) | none
+
+# ── Install-context logging (non-fatal telemetry) ────────────────────────────
+logging:
+  enabled: true                      # records workspace URL/IDs/user (best-effort upload)
